@@ -3,7 +3,9 @@
 ## 1. System Design
 
 **a. Initial design**
-
+##- 3 core actions a user should perform:   Add/change pet/owner info (basic info re:owner and pet)
+                                            Add tasks (feeding, pet sitting, walks, playtime, grooming, medication)
+                                            Generate Daily Plan (Organizes tasks by time, priority, conflicts, etc)
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
