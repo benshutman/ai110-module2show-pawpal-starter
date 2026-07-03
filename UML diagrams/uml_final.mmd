@@ -1,0 +1,41 @@
+classDiagram
+class Owner {
+    -str name
+    -list preferences
+    -list pets
+
+    +add_pet(pet)
+    +get_pets()
+}
+
+class Pet {
+    -str name
+    -str species
+    -int age
+    -list tasks
+
+    +add_task(task)
+    +get_tasks()
+}
+
+class Task {
+    -str title
+    -int duration_minutes
+    -str priority
+    -bool recurring
+
+    +get_priority_value()
+    +describe()
+}
+
+class Scheduler {
+    -int available_minutes
+
+    +sort_tasks(tasks)
+    +build_schedule(tasks)
+    +explain_plan(plan)
+}
+
+Owner "1" *-- "*" Pet : owns
+Pet "1" *-- "*" Task : has
+Scheduler ..> Task : schedules
