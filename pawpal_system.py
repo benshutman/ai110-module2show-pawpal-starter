@@ -4,14 +4,20 @@ from dataclasses import dataclass, field
 @dataclass
 class Task:
     title: str
+    description: str
     duration_minutes: int
     priority: str
+    due_date: str
     recurring: bool
+    completion_status: bool = False
 
     def get_priority_value(self):
         pass
 
     def describe(self):
+        pass
+
+    def mark_complete(self):
         pass
 
 

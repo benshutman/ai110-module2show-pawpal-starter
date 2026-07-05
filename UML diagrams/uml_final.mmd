@@ -20,12 +20,16 @@ class Pet {
 
 class Task {
     -str title
+    -str description
     -int duration_minutes
     -str priority
+    -str due_date
     -bool recurring
+    -bool completion_status
 
     +get_priority_value()
     +describe()
+    +mark_complete()
 }
 
 class Scheduler {
