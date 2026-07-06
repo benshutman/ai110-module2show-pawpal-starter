@@ -103,11 +103,13 @@ else:
     with col3:
         priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 
-    col4, col5 = st.columns(2)
+    col4, col5, col6 = st.columns(3)
     with col4:
         due_date = st.date_input("Due date")
     with col5:
-        recurring = st.checkbox("Recurring (daily essential)", value=False)
+        recurring = st.selectbox("Recurring", ["none", "daily", "weekly"])
+    with col6:
+        preferred_time = st.text_input("Preferred time (HH:MM, optional)", value="")
 
     task_description = st.text_input("Description (optional)", value="")
 
@@ -121,6 +123,7 @@ else:
                 priority=priority,
                 due_date=str(due_date),
                 recurring=recurring,
+                preferred_time=preferred_time,
             )
         )
         st.success(f"Added '{task_title}' to {pet.name}.")
@@ -138,6 +141,7 @@ else:
                         "title": t.title,
                         "duration_minutes": t.duration_minutes,
                         "priority": t.priority,
+                        "preferred_time": t.preferred_time or "flexible",
                         "recurring": t.recurring,
                         "done": t.completion_status,
                     }
@@ -146,6 +150,64 @@ else:
             )
     if not any_tasks:
         st.info("No tasks yet. Add one above.")
+
+st.divider()
+
+# --- Browse: sort_by_time() and filter_tasks() ---
+st.subheader("Browse Tasks")
+all_tasks_for_browsing = owner.get_all_tasks()
+if not all_tasks_for_browsing:
+    st.info("No tasks yet. Add one above to sort or filter.")
+else:
+    browser = Scheduler(available_minutes=0)  # sort_by_time/filter_tasks/mark_task_complete don't use available_minutes
+
+    st.write("Mark a task complete:")
+    task_labels = [f"{t.pet_name}: {t.title}" for t in all_tasks_for_browsing]
+    task_choice = st.selectbox(
+        "Task", range(len(all_tasks_for_browsing)), format_func=lambda i: task_labels[i]
+    )
+    if st.button("Mark complete"):
+        chosen_task = all_tasks_for_browsing[task_choice]
+        next_task = browser.mark_task_complete(owner, chosen_task)
+        if next_task:
+            st.success(
+                f"Marked '{chosen_task.title}' complete. Next occurrence for "
+                f"{next_task.pet_name} scheduled on {next_task.due_date}."
+            )
+        else:
+            st.success(f"Marked '{chosen_task.title}' complete.")
+        all_tasks_for_browsing = owner.get_all_tasks()  # refresh so the view below reflects the change
+
+    view = st.radio(
+        "View", ["All (sorted by time)", "Filter by pet", "Filter by status"], horizontal=True
+    )
+
+    if view == "All (sorted by time)":
+        shown = browser.sort_by_time(all_tasks_for_browsing)
+    elif view == "Filter by pet":
+        pet_choice = st.selectbox("Pet", [p.name for p in pets])
+        shown = browser.filter_tasks(all_tasks_for_browsing, pet_name=pet_choice)
+    else:
+        status_choice = st.selectbox("Status", ["Done", "Not done"])
+        shown = browser.filter_tasks(
+            all_tasks_for_browsing, completion_status=(status_choice == "Done")
+        )
+
+    if shown:
+        st.table(
+            [
+                {
+                    "pet": t.pet_name,
+                    "title": t.title,
+                    "preferred_time": t.preferred_time or "flexible",
+                    "priority": t.priority,
+                    "done": t.completion_status,
+                }
+                for t in shown
+            ]
+        )
+    else:
+        st.info("No tasks match this view.")
 
 st.divider()
 
