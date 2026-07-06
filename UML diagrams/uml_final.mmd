@@ -6,6 +6,7 @@ class Owner {
 
     +add_pet(pet)
     +get_pets()
+    +get_all_tasks()
 }
 
 class Pet {
@@ -34,6 +35,7 @@ class Task {
 
 class Scheduler {
     -int available_minutes
+    -str start_time
 
     +sort_tasks(tasks)
     +build_schedule(tasks)
