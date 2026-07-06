@@ -85,6 +85,7 @@ class Owner:
 
 class Scheduler:
     def __init__(self, available_minutes: int, start_time: str = "08:00"):
+        """Create a scheduler with a daily time budget and a plan start time."""
         self.available_minutes = available_minutes
         self.start_time = start_time
 

@@ -44,14 +44,29 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Running the demo script exercises the logic layer end to end and prints a daily plan
+built across all of the owner's pets:
+
+```bash
+python main.py
+```
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+====================================================
+      🐾 PawPal+ — Today's Schedule for Jordan       
+====================================================
+Pets: Mochi (dog), Whiskers (cat)
+----------------------------------------------------
+  08:00  Feeding           10 min  [high]  (recurring)
+  08:10  Morning walk      30 min  [high]  (recurring)
+  08:40  Litter box         5 min  [medium]  (recurring)
+  08:45  Playtime          15 min  [medium]
+----------------------------------------------------
+Skipped (not enough time today):
+  • Grooming          45 min  [low]
+----------------------------------------------------
+Summary: 4 task(s) scheduled, 60/60 minutes used.
+====================================================
 ```
 
 ## 🧪 Testing PawPal+
@@ -67,19 +82,25 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
+rootdir: .../ai110-module2show-pawpal-starter
+plugins: anyio-4.14.1
+collected 2 items
+
+tests/test_pawpal.py ..                                                  [100%]
+
+============================== 2 passed in 0.01s ===============================
 ```
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_tasks()`, `Task.get_priority_value()` | Orders by priority (high→low), then recurring essentials, then shorter duration as a tie-break. |
+| Filtering | `Scheduler.build_schedule()` | Greedy time budget — skips any task whose duration exceeds the remaining `available_minutes`. |
+| Conflict handling | `Scheduler.build_schedule()` | Overlaps are avoided by construction: each task's start time is the previous task's end, so no two slots collide. |
+| Recurring tasks | `Scheduler.sort_tasks()`, `Task.describe()` | `Task.recurring` flag boosts recurring tasks in the sort tie-break so daily essentials aren't dropped ahead of one-offs; `describe()` labels them `(recurring)`. |
 
 ## 📸 Demo Walkthrough
 
