@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 
-def make_task(title="Morning walk", duration=20, priority="high", recurring="none"):
+def make_task(title="Morning walk", duration=20, priority="high", recurring="none", preferred_time=""):
     """Build a Task with sensible defaults so each test only sets what it cares about."""
     return Task(
         title=title,
@@ -14,6 +14,7 @@ def make_task(title="Morning walk", duration=20, priority="high", recurring="non
         priority=priority,
         due_date="2026-07-05",
         recurring=recurring,
+        preferred_time=preferred_time,
     )
 
 
@@ -68,3 +69,26 @@ def test_marking_non_recurring_task_complete_does_not_create_next_occurrence():
 
     assert next_task is None
     assert len(pet.get_tasks()) == 1
+
+
+def test_detect_conflicts_flags_tasks_at_the_same_preferred_time():
+    """Conflict Detection: two tasks at the exact same preferred time are flagged."""
+    scheduler = Scheduler(available_minutes=60)
+    walk = make_task(title="Morning walk", preferred_time="07:30")
+    vet_call = make_task(title="Vet call", preferred_time="07:30")
+    grooming = make_task(title="Grooming", preferred_time="14:00")
+
+    conflicts = scheduler.detect_conflicts([walk, vet_call, grooming])
+
+    assert conflicts == [(walk, vet_call)]
+
+
+def test_detect_conflicts_ignores_flexible_tasks():
+    """Conflict Detection: tasks with no preferred time never conflict."""
+    scheduler = Scheduler(available_minutes=60)
+    flexible_one = make_task(title="Playtime")
+    flexible_two = make_task(title="Brushing")
+
+    conflicts = scheduler.detect_conflicts([flexible_one, flexible_two])
+
+    assert conflicts == []

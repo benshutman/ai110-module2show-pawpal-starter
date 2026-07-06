@@ -209,6 +209,11 @@ else:
     else:
         st.info("No tasks match this view.")
 
+    conflicts = browser.detect_conflicts(all_tasks_for_browsing)
+    if conflicts:
+        for task_a, task_b in conflicts:
+            st.warning(f"⚠ '{task_a.title}' and '{task_b.title}' both want {task_a.preferred_time}.")
+
 st.divider()
 
 # --- Build Schedule: wired to the Scheduler across all of the owner's pets ---

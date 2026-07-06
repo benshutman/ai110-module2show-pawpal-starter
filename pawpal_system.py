@@ -47,8 +47,14 @@ class Task:
         self.completion_status = True
 
     def next_occurrence(self):
-        """Return a fresh Task for this task's next occurrence, due one interval
-        past today, or ``None`` if this task doesn't recur.
+        """Build the next scheduled instance of a recurring task.
+
+        Returns:
+            Task: A new, incomplete Task with the same title/description/duration/
+                priority/preferred_time, due one interval (1 day for "daily", 7
+                days for "weekly") past today.
+            None: If ``self.recurring`` is "none" (or any value not in
+                RECURRENCE_INTERVALS).
         """
         interval = RECURRENCE_INTERVALS.get(self.recurring)
         if interval is None:
@@ -132,11 +138,16 @@ class Scheduler:
         )
 
     def sort_by_time(self, tasks):
-        """Return a new list ordered by each task's preferred time of day ("HH:MM").
+        """Order tasks by their preferred time of day.
 
-        Tasks without a preferred time are flexible and sort after every task
-        that has one. Zero-padded "HH:MM" strings compare correctly with plain
-        string ordering, so no parsing into minutes is needed.
+        Args:
+            tasks (list[Task]): Tasks to sort; not mutated.
+
+        Returns:
+            list[Task]: A new list ordered by ``preferred_time`` ("HH:MM").
+                Tasks without a preferred time are flexible and sort after every
+                task that has one. Zero-padded "HH:MM" strings compare correctly
+                with plain string ordering, so no parsing into minutes is needed.
 
         Algorithmic feature #2: sorting by time.
         """
@@ -146,10 +157,21 @@ class Scheduler:
         )
 
     def filter_tasks(self, tasks, pet_name=None, completion_status=None):
-        """Return tasks matching the given pet name and/or completion status.
+        """Filter tasks by pet name and/or completion status.
 
-        Either filter can be left as ``None`` to skip it, so callers can filter
-        by just one field or both at once.
+        Args:
+            tasks (list[Task]): Tasks to filter; not mutated.
+            pet_name (str, optional): Keep only tasks whose ``pet_name`` matches.
+                Skipped when ``None``.
+            completion_status (bool, optional): Keep only tasks whose
+                ``completion_status`` matches. Skipped when ``None``.
+
+        Returns:
+            list[Task]: Tasks matching every filter that was given. Applied as
+                two sequential passes (rather than one combined-condition
+                comprehension) because that reads as plainly as the feature
+                works: filter by pet, then by status — the task lists here are
+                small enough that the extra pass costs nothing.
 
         Algorithmic feature #3: filtering.
         """
@@ -160,11 +182,47 @@ class Scheduler:
             filtered = [t for t in filtered if t.completion_status == completion_status]
         return filtered
 
-    def mark_task_complete(self, owner, task):
-        """Mark a task complete and, if it recurs daily/weekly, automatically
-        create and attach its next occurrence to the same pet.
+    def detect_conflicts(self, tasks):
+        """Find tasks scheduled at the exact same time of day.
 
-        Algorithmic feature #4: recurrence automation via Task.next_occurrence().
+        Args:
+            tasks (list[Task]): Tasks to check; not mutated.
+
+        Returns:
+            list[tuple[Task, Task]]: Every pair of tasks that share a non-empty
+                ``preferred_time``. Tasks without a preferred time are flexible
+                and never conflict. This only catches exact "HH:MM" matches —
+                see reflection.md section 2b for the tradeoff against true
+                overlapping-duration detection.
+
+        Algorithmic feature #4: basic conflict detection.
+        """
+        by_time = {}
+        for task in tasks:
+            if task.preferred_time:
+                by_time.setdefault(task.preferred_time, []).append(task)
+
+        conflicts = []
+        for tasks_at_time in by_time.values():
+            for i in range(len(tasks_at_time)):
+                for j in range(i + 1, len(tasks_at_time)):
+                    conflicts.append((tasks_at_time[i], tasks_at_time[j]))
+        return conflicts
+
+    def mark_task_complete(self, owner, task):
+        """Complete a task and auto-schedule its next occurrence if it recurs.
+
+        Args:
+            owner (Owner): Owner whose pets are searched (by ``task.pet_name``)
+                for where to attach the next occurrence.
+            task (Task): The task to mark complete.
+
+        Returns:
+            Task: The newly scheduled next occurrence, if ``task`` recurs
+                daily/weekly and its pet was found.
+            None: If the task doesn't recur.
+
+        Algorithmic feature #5: recurrence automation via Task.next_occurrence().
         """
         task.mark_complete()
         next_task = task.next_occurrence()
@@ -178,9 +236,9 @@ class Scheduler:
     def build_schedule(self, tasks):
         """Build a time-stamped daily plan that fits within ``available_minutes``.
 
-        Algorithmic feature #5: greedy time-budget filtering — tasks that don't fit
+        Algorithmic feature #6: greedy time-budget filtering — tasks that don't fit
         the remaining time are skipped rather than scheduled.
-        Algorithmic feature #6: recurring tasks are favored (via sort_tasks) so daily
+        Algorithmic feature #7: recurring tasks are favored (via sort_tasks) so daily
         essentials aren't dropped ahead of one-off tasks of equal priority.
         """
         ordered = self.sort_tasks(tasks)

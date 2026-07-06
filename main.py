@@ -130,6 +130,18 @@ def main():
     if next_walk:
         print(f"  Next occurrence scheduled: '{next_walk.title}' due {next_walk.due_date}.")
 
+    # 6. Basic conflict detection: the just-completed "Morning walk" and its
+    #    freshly scheduled next occurrence both still want the same 07:30 slot,
+    #    so this should catch that collision.
+    print("-" * 52)
+    print("Conflict check:")
+    conflicts = scheduler.detect_conflicts(owner.get_all_tasks())
+    if conflicts:
+        for task_a, task_b in conflicts:
+            print(f"  ⚠ '{task_a.title}' and '{task_b.title}' both want {task_a.preferred_time}.")
+    else:
+        print("  No conflicts found.")
+
 
 if __name__ == "__main__":
     main()

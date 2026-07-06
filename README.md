@@ -52,14 +52,30 @@ python main.py
 ```
 
 ```
+----------------------------------------------------
+All tasks sorted by preferred time:
+  07:30    Morning walk     [Mochi]
+  08:00    Feeding          [Whiskers]
+  08:15    Litter box       [Whiskers]
+  14:00    Grooming         [Mochi]
+  17:30    Playtime         [Whiskers]
+----------------------------------------------------
+Filtered — Whiskers' tasks:
+  Playtime         [Whiskers] (not done)
+  Litter box       [Whiskers] (done)
+  Feeding          [Whiskers] (done)
+----------------------------------------------------
+Filtered — completed tasks:
+  Litter box       [Whiskers] (done)
+  Feeding          [Whiskers] (done)
 ====================================================
       🐾 PawPal+ — Today's Schedule for Jordan       
 ====================================================
 Pets: Mochi (dog), Whiskers (cat)
 ----------------------------------------------------
-  08:00  Feeding           10 min  [high]  (recurring)
-  08:10  Morning walk      30 min  [high]  (recurring)
-  08:40  Litter box         5 min  [medium]  (recurring)
+  08:00  Feeding           10 min  [high]  (daily, done)
+  08:10  Morning walk      30 min  [high]  (daily)
+  08:40  Litter box         5 min  [medium]  (daily, done)
   08:45  Playtime          15 min  [medium]
 ----------------------------------------------------
 Skipped (not enough time today):
@@ -67,6 +83,13 @@ Skipped (not enough time today):
 ----------------------------------------------------
 Summary: 4 task(s) scheduled, 60/60 minutes used.
 ====================================================
+----------------------------------------------------
+Recurrence automation:
+  Completed 'Morning walk' — Mochi now has 3 task(s) (was 2).
+  Next occurrence scheduled: 'Morning walk' due 2026-07-07.
+----------------------------------------------------
+Conflict check:
+  ⚠ 'Morning walk' and 'Morning walk' both want 07:30.
 ```
 
 ## 🧪 Testing PawPal+
@@ -86,21 +109,23 @@ Sample test output:
 platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: .../ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 2 items
+collected 6 items
 
-tests/test_pawpal.py ..                                                  [100%]
+tests/test_pawpal.py ......                                              [100%]
 
-============================== 2 passed in 0.01s ===============================
+============================== 6 passed in 0.01s ===============================
 ```
 
 ## 📐 Smarter Scheduling
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | `Scheduler.sort_tasks()`, `Task.get_priority_value()` | Orders by priority (high→low), then recurring essentials, then shorter duration as a tie-break. |
-| Filtering | `Scheduler.build_schedule()` | Greedy time budget — skips any task whose duration exceeds the remaining `available_minutes`. |
-| Conflict handling | `Scheduler.build_schedule()` | Overlaps are avoided by construction: each task's start time is the previous task's end, so no two slots collide. |
-| Recurring tasks | `Scheduler.sort_tasks()`, `Task.describe()` | `Task.recurring` flag boosts recurring tasks in the sort tie-break so daily essentials aren't dropped ahead of one-offs; `describe()` labels them `(recurring)`. |
+| Priority sorting | `Scheduler.sort_tasks()`, `Task.get_priority_value()` | Orders by priority (high→low), then recurring tasks, then shorter duration as a tie-break so more tasks fit the day. |
+| Sorting behavior | `Scheduler.sort_by_time()` | Orders tasks by `preferred_time` ("HH:MM"); tasks with no preferred time are flexible and sort last. |
+| Filtering behavior | `Scheduler.filter_tasks()` | Filters a task list by pet name and/or completion status, independently or together. |
+| Conflict detection logic | `Scheduler.detect_conflicts()` | Flags any pair of tasks that share the exact same `preferred_time`. Exact-match only, not true overlapping-duration detection — see `reflection.md` section 2b for that tradeoff. |
+| Recurring task logic | `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a `daily`/`weekly` task automatically creates and attaches its next occurrence (due one interval past today) to the same pet. |
+| Greedy scheduling | `Scheduler.build_schedule()` | Packs the priority-sorted list into the day sequentially, skipping any task that doesn't fit the remaining `available_minutes`. |
 
 ## 📸 Demo Walkthrough
 

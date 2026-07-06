@@ -30,7 +30,9 @@
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+    - `Scheduler.detect_conflicts()` only flags tasks that share the *exact same* `preferred_time` string (e.g., two tasks both set to "07:30"). It does not check whether one task's duration actually overlaps into another's start time — a 30-minute walk starting at 07:30 and a task starting at 07:45 would genuinely overlap in real life, but since "07:30" != "07:45", my scheduler would never flag them.
 - Why is that tradeoff reasonable for this scenario?
+    - True overlap detection means converting every task's start time and duration into a minute-of-day interval, then comparing every pair of intervals for overlap — more code, more edge cases (midnight wraparound, back-to-back tasks that just touch but don't overlap), for a feature this app only needs "basic" version of. For a single owner tracking a handful of daily pet-care tasks, exact-time collisions are the common case worth catching (e.g., recurring tasks landing on the same slot as a one-off), and I'd rather ship a simple, correct check than a more complete one I'm less confident is bug-free. I confirmed this is a live tradeoff, not a hypothetical one: in `main.py`, completing the daily "Morning walk" auto-schedules its next occurrence at the same 07:30 slot as the just-completed original, and `detect_conflicts()` correctly catches that pair.
 
 ---
 
