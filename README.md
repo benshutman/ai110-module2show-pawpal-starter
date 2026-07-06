@@ -109,12 +109,30 @@ Sample test output:
 platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: .../ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 6 items
+collected 8 items
 
-tests/test_pawpal.py ......                                              [100%]
+tests/test_pawpal.py ........                                            [100%]
 
-============================== 6 passed in 0.01s ===============================
+============================== 8 passed in 0.01s ===============================
 ```
+
+**Test coverage:**
+
+- **Task completion** — `mark_complete()` flips `completion_status` from `False` to `True`.
+- **Task addition** — adding tasks to a `Pet` increases its task count.
+- **Recurring automation** — completing a `daily`/`weekly` task creates a correctly-dated next occurrence on the same pet; completing a non-recurring task creates nothing.
+- **Conflict detection** — tasks sharing an exact `preferred_time` are flagged as a conflicting pair; tasks with no preferred time never conflict.
+- **Sorting** — `sort_by_time()` orders tasks chronologically by `preferred_time`, with flexible (no-time) tasks sorted last.
+- **Filtering** — `filter_tasks()` narrows a pooled task list down by pet name and by completion status.
+
+## 🧩 System Design
+
+PawPal+ is built around four classes:
+
+- **`Owner`** — the pet owner using the app. Holds their name, preferences, and the list of `Pet`s they manage. `get_all_tasks()` pools every pet's tasks into one flat list so the `Scheduler` can plan across all of an owner's pets at once.
+- **`Pet`** — a single pet (name, species, age) and its list of `Task`s. `add_task()` stamps each task with the pet's name so a pooled task list can still be traced back to which pet it belongs to.
+- **`Task`** — one care task: title, description, duration, priority, due date, recurrence (`"none"`/`"daily"`/`"weekly"`), an optional preferred time of day, and completion status. A task controls its own state — `mark_complete()` is the only way to flip `completion_status`, and `next_occurrence()` builds the task's next instance if it recurs.
+- **`Scheduler`** — takes a pool of tasks and a daily time budget. It can sort tasks (by priority or by time), filter them (by pet or status), detect basic scheduling conflicts, mark a task complete (auto-scheduling its next occurrence if it recurs), and greedily build/explain a day's plan that fits the available time.
 
 ## 📐 Smarter Scheduling
 

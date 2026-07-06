@@ -41,12 +41,16 @@
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+    - I worked through this project step by step with Claude, sharing each phase's checklist (sorting/filtering, recurring tasks, evaluate-and-refine, document-and-merge) and asking it to implement the described logic directly in my existing classes rather than starting over. I also used it to review my own code — asking it to critique one of my methods for readability/performance before I decided whether to actually keep the suggestion.
 - What kinds of prompts or questions were most helpful?
+    - Narrow, concrete prompts worked much better than vague ones. "Share one of your completed algorithmic methods and ask how it could be simplified" produced a focused before/after comparison on one function, instead of a scattershot list of unrelated suggestions a generic "review my code" would have produced. Asking it to actually run `main.py` and `pytest` after every change — instead of just describing what the code should do — also caught things I wouldn't have noticed from reading a diff alone.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+    - When I asked Claude to simplify `Scheduler.filter_tasks()`, it collapsed two sequential list-comprehension passes into one comprehension with a combined `(x is None or ...) and (y is None or ...)` condition. That version is more "Pythonic" and technically does one less pass over the list, but I decided it was harder to read at a glance than the original step-by-step version — especially since the app only ever filters a handful of tasks at a time, so the performance win wasn't worth the readability cost. I rejected it and kept the original two-pass version.
 - How did you evaluate or verify what the AI suggested?
+    - I compared both versions side by side, ran the full pytest suite after each change to make sure behavior didn't change (it didn't — same tests passing both times), and re-ran `main.py` to confirm the "Filtered — Whiskers' tasks" / "Filtered — completed tasks" demo output was identical before and after.
 
 ---
 
@@ -55,12 +59,16 @@
 **a. What you tested**
 
 - What behaviors did you test?
+    - I tested the four algorithmic features this project is built around: sorting (`sort_by_time` orders tasks chronologically, with flexible tasks sorted last), filtering (`filter_tasks` narrows a pooled list by pet name and by completion status), recurring automation (completing a `daily`/`weekly` task creates a correctly-dated next occurrence, and a non-recurring task doesn't create anything), and conflict detection (tasks at the exact same preferred time are flagged, flexible tasks never are). I also kept the task-completion and task-addition tests from earlier phases.
 - Why were these tests important?
+    - These are the core behaviors the whole app is supposed to demonstrate, and they're easy to get subtly wrong — an off-by-one in the `timedelta` math for "next occurrence," or a filter that silently returns everything instead of nothing when a field doesn't match. The demo script (`main.py`) only walks through one hand-built scenario, so it wouldn't catch a bug in a case that scenario doesn't happen to hit the way a dedicated test does.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+    - Fairly confident on the paths I actually exercised — all 8 pytest tests pass. I didn't stop at unit tests either: I used Streamlit's `AppTest` API to drive the real Streamlit app end-to-end (adding pets/tasks, marking tasks complete, switching between the sort/filter views) to confirm the UI wiring itself works, not just the underlying functions in isolation.
 - What edge cases would you test next if you had more time?
+    - True overlapping-duration conflict detection instead of exact-time matching (the known tradeoff documented in section 2b), malformed `preferred_time` input (nothing currently validates "07:30" vs. "7:30" vs. plain text), and weekly recurrence crossing a month or year boundary.
 
 ---
 
