@@ -115,18 +115,21 @@ else:
 
     if st.button("Add task"):
         pet = pets[target_index]
-        pet.add_task(
-            Task(
-                title=task_title,
-                description=task_description,
-                duration_minutes=int(duration),
-                priority=priority,
-                due_date=str(due_date),
-                recurring=recurring,
-                preferred_time=preferred_time,
+        try:
+            pet.add_task(
+                Task(
+                    title=task_title,
+                    description=task_description,
+                    duration_minutes=int(duration),
+                    priority=priority,
+                    due_date=str(due_date),
+                    recurring=recurring,
+                    preferred_time=preferred_time,
+                )
             )
-        )
-        st.success(f"Added '{task_title}' to {pet.name}.")
+            st.success(f"Added '{task_title}' to {pet.name}.")
+        except ValueError as e:
+            st.error(str(e))
 
     # Show each pet's tasks so the change is visible immediately after adding.
     any_tasks = False

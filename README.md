@@ -109,27 +109,27 @@ Sample test output:
 platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: /Users/benjaminshutman/Codepath x Anthropic Summer 2026/Codepath-x-Anthropic/ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 22 items
+collected 27 items
 
-tests/test_pawpal.py ......................                              [100%]
+tests/test_pawpal.py ...........................                         [100%]
 
-============================== 22 passed in 0.01s ===============================
+============================== 27 passed in 0.01s ===============================
 ```
 
 **Test coverage:**
 
+- **Input validation** — `preferred_time` is normalized to zero-padded `"HH:MM"` (e.g. `"7:30"` → `"07:30"`) so sorting/conflict comparisons stay correct regardless of how it's typed; malformed values raise `ValueError` instead of silently corrupting results.
 - **Task completion** — `mark_complete()` flips `completion_status` from `False` to `True`.
 - **Task addition** — adding tasks to a `Pet` increases its task count.
 - **Recurring automation** — completing a `daily`/`weekly` task creates a correctly-dated next occurrence on the same pet; completing a non-recurring task creates nothing; completing an already-completed task a second time doesn't duplicate the next occurrence.
-- **Conflict detection** — tasks sharing an exact `preferred_time` are flagged (including all pairs when 3+ tasks collide); tasks with no preferred time, or an empty task list, never conflict.
+- **Conflict detection** — tasks whose `[preferred_time, preferred_time + duration)` ranges overlap are flagged, even at different start times; back-to-back tasks that only touch, tasks with no preferred time, and an empty task list never conflict.
 - **Sorting** — `sort_by_time()` orders tasks chronologically by `preferred_time`, with flexible (no-time) tasks sorted last and ties/all-flexible lists keeping their original order (stable sort).
 - **Filtering** — `filter_tasks()` narrows a pooled task list by pet name, by completion status, or both at once; unmatched filters and empty input return an empty list.
 - **Greedy scheduling** — `build_schedule()` schedules tasks that fit the time budget and skips the rest, including the exact-fit boundary, a zero-minute budget, an empty task list, and wrapping the clock past midnight.
 
-**Confidence Level:** ⭐⭐⭐⭐☆ (4/5)
+**Confidence Level:** ⭐⭐⭐⭐⭐ (5/5)
 
-All 22 tests pass, covering every algorithmic feature's happy path plus real edge cases (empty lists, ties, exact-fit boundaries, midnight wraparound, double-completion) — and writing the edge cases actually caught a real bug (`mark_task_complete()` could double-schedule a recurring task before the guard was added). It's not a 5 because a few gaps are known and documented rather than closed: `detect_conflicts()` only catches exact-time matches, not true overlapping durations (see `reflection.md` §2b), and there's no input validation on `preferred_time` strings, so a malformed value like `"7:30"` would silently sort/compare incorrectly instead of raising an error.
-- **Greedy scheduling** — `build_schedule()` schedules tasks that fit the time budget and skips the rest, including the exact-fit boundary, a zero-minute budget, an empty task list, and wrapping the clock past midnight.
+All 27 tests pass, covering every algorithmic feature's happy path plus real edge cases (empty lists, ties, exact-fit boundaries, midnight wraparound, double-completion, malformed input) — and writing the edge cases actually caught a real bug (`mark_task_complete()` could double-schedule a recurring task before a guard was added). The two gaps flagged in an earlier pass — exact-time-only conflict detection and unvalidated `preferred_time` input — are now closed: `detect_conflicts()` does real interval-overlap math, and `Task.__post_init__` validates/normalizes `preferred_time` at construction time, with `app.py` catching the resulting `ValueError` gracefully. One small, deliberately-accepted limitation remains: overlap checks don't span midnight (a task at "23:50" isn't checked against next-day tasks) — see `reflection.md` §2b for why that's an acceptable tradeoff for a daily pet-care scheduler.
 
 ## 🧩 System Design
 
@@ -147,9 +147,10 @@ PawPal+ is built around four classes:
 | Priority sorting | `Scheduler.sort_tasks()`, `Task.get_priority_value()` | Orders by priority (high→low), then recurring tasks, then shorter duration as a tie-break so more tasks fit the day. |
 | Sorting behavior | `Scheduler.sort_by_time()` | Orders tasks by `preferred_time` ("HH:MM"); tasks with no preferred time are flexible and sort last. |
 | Filtering behavior | `Scheduler.filter_tasks()` | Filters a task list by pet name and/or completion status, independently or together. |
-| Conflict detection logic | `Scheduler.detect_conflicts()` | Flags any pair of tasks that share the exact same `preferred_time`. Exact-match only, not true overlapping-duration detection — see `reflection.md` section 2b for that tradeoff. |
-| Recurring task logic | `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a `daily`/`weekly` task automatically creates and attaches its next occurrence (due one interval past today) to the same pet. |
+| Conflict detection logic | `Scheduler.detect_conflicts()` | Flags any pair of tasks whose `[preferred_time, preferred_time + duration)` ranges truly overlap, even at different start times. Compares within a single day only — see `reflection.md` section 2b for that remaining tradeoff. |
+| Recurring task logic | `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a `daily`/`weekly` task automatically creates and attaches its next occurrence (due one interval past today) to the same pet. Guards against double-completion creating a duplicate occurrence. |
 | Greedy scheduling | `Scheduler.build_schedule()` | Packs the priority-sorted list into the day sequentially, skipping any task that doesn't fit the remaining `available_minutes`. |
+| Input validation | `Task.__post_init__()` | Normalizes `preferred_time` to zero-padded `"HH:MM"` (e.g. `"7:30"` → `"07:30"`) and raises `ValueError` on malformed input, so `app.py` can catch it and show `st.error()` instead of crashing. |
 
 ## 📸 Demo Walkthrough
 

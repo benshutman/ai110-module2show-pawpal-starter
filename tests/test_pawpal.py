@@ -2,6 +2,8 @@
 
 from datetime import date, timedelta
 
+import pytest
+
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 
@@ -16,6 +18,35 @@ def make_task(title="Morning walk", duration=20, priority="high", recurring="non
         recurring=recurring,
         preferred_time=preferred_time,
     )
+
+
+def test_task_normalizes_preferred_time_missing_leading_zero():
+    """Input Validation: "7:30" is stored as zero-padded "07:30" so string-based
+    sorting and comparison stay correct regardless of how a user types it."""
+    task = make_task(preferred_time="7:30")
+
+    assert task.preferred_time == "07:30"
+
+
+def test_task_leaves_empty_preferred_time_untouched():
+    """Input Validation: an empty preferred_time means "flexible" and is not
+    run through validation (it isn't a clock string at all)."""
+    task = make_task(preferred_time="")
+
+    assert task.preferred_time == ""
+
+
+def test_task_rejects_invalid_preferred_time():
+    """Input Validation (edge case): a malformed preferred_time raises ValueError
+    at construction time instead of silently corrupting sort/conflict results."""
+    with pytest.raises(ValueError):
+        make_task(preferred_time="not-a-time")
+
+    with pytest.raises(ValueError):
+        make_task(preferred_time="25:00")
+
+    with pytest.raises(ValueError):
+        make_task(preferred_time="12:75")
 
 
 def test_mark_complete_changes_status():
@@ -143,6 +174,30 @@ def test_detect_conflicts_returns_empty_list_for_no_tasks():
     scheduler = Scheduler(available_minutes=60)
 
     assert scheduler.detect_conflicts([]) == []
+
+
+def test_detect_conflicts_flags_overlapping_tasks_with_different_start_times():
+    """Conflict Detection: a 20-minute task at 07:30 (ending 07:50) overlaps a
+    task starting at 07:45, even though their preferred_time values differ."""
+    scheduler = Scheduler(available_minutes=60)
+    walk = make_task(title="Morning walk", duration=20, preferred_time="07:30")
+    vet_call = make_task(title="Vet call", duration=15, preferred_time="07:45")
+
+    conflicts = scheduler.detect_conflicts([walk, vet_call])
+
+    assert conflicts == [(walk, vet_call)]
+
+
+def test_detect_conflicts_ignores_back_to_back_tasks_that_only_touch():
+    """Conflict Detection (edge case): a task ending exactly when the next one
+    starts does not count as an overlap (half-open ranges)."""
+    scheduler = Scheduler(available_minutes=60)
+    walk = make_task(title="Morning walk", duration=20, preferred_time="07:30")  # ends 07:50
+    feeding = make_task(title="Feeding", duration=10, preferred_time="07:50")
+
+    conflicts = scheduler.detect_conflicts([walk, feeding])
+
+    assert conflicts == []
 
 
 def test_sort_by_time_orders_tasks_chronologically():

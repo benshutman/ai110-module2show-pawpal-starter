@@ -17,6 +17,34 @@ def _add_minutes(time_str, minutes):
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
+def _time_to_minutes(time_str):
+    """Convert an ``"HH:MM"`` clock string to minutes since midnight."""
+    hours, mins = (int(part) for part in time_str.split(":"))
+    return hours * 60 + mins
+
+
+def _normalize_time(time_str):
+    """Validate a clock string and zero-pad it to a canonical ``"HH:MM"``.
+
+    Accepts any ``"H:MM"``/``"HH:MM"`` 24-hour string (e.g. ``"7:30"``) so a
+    user typing without a leading zero still sorts and compares correctly
+    downstream, where ``"HH:MM"`` strings are compared as plain text.
+
+    Raises:
+        ValueError: If ``time_str`` isn't a valid 24-hour clock string.
+    """
+    try:
+        hours_str, minutes_str = time_str.split(":")
+        hours, minutes = int(hours_str), int(minutes_str)
+    except (ValueError, AttributeError):
+        raise ValueError(f'preferred_time must be an "HH:MM" string, got {time_str!r}')
+
+    if not (0 <= hours < 24 and 0 <= minutes < 60):
+        raise ValueError(f'preferred_time must be a valid 24-hour time, got {time_str!r}')
+
+    return f"{hours:02d}:{minutes:02d}"
+
+
 @dataclass
 class Task:
     title: str
@@ -28,6 +56,11 @@ class Task:
     completion_status: bool = False
     preferred_time: str = ""
     pet_name: str = ""
+
+    def __post_init__(self):
+        """Normalize preferred_time so every stored value is comparable "HH:MM"."""
+        if self.preferred_time:
+            self.preferred_time = _normalize_time(self.preferred_time)
 
     def get_priority_value(self):
         """Return a sortable weight for this task's priority (higher = more urgent)."""
@@ -183,30 +216,34 @@ class Scheduler:
         return filtered
 
     def detect_conflicts(self, tasks):
-        """Find tasks scheduled at the exact same time of day.
+        """Find tasks whose [preferred_time, preferred_time + duration) ranges overlap.
 
         Args:
             tasks (list[Task]): Tasks to check; not mutated.
 
         Returns:
-            list[tuple[Task, Task]]: Every pair of tasks that share a non-empty
-                ``preferred_time``. Tasks without a preferred time are flexible
-                and never conflict. This only catches exact "HH:MM" matches —
-                see reflection.md section 2b for the tradeoff against true
-                overlapping-duration detection.
+            list[tuple[Task, Task]]: Every pair of tasks with a non-empty
+                ``preferred_time`` whose scheduled ranges overlap — including
+                tasks that start at different times but still collide (e.g. a
+                20-minute task at "07:30" overlaps one starting at "07:45").
+                Tasks without a preferred time are flexible and never conflict.
+                Ranges are compared within a single day; a task whose range
+                would run past midnight is not checked against next-day tasks
+                (see reflection.md section 2b).
 
-        Algorithmic feature #4: basic conflict detection.
+        Algorithmic feature #4: overlap-aware conflict detection.
         """
-        by_time = {}
-        for task in tasks:
-            if task.preferred_time:
-                by_time.setdefault(task.preferred_time, []).append(task)
+        timed_tasks = [t for t in tasks if t.preferred_time]
 
         conflicts = []
-        for tasks_at_time in by_time.values():
-            for i in range(len(tasks_at_time)):
-                for j in range(i + 1, len(tasks_at_time)):
-                    conflicts.append((tasks_at_time[i], tasks_at_time[j]))
+        for i in range(len(timed_tasks)):
+            start_a = _time_to_minutes(timed_tasks[i].preferred_time)
+            end_a = start_a + timed_tasks[i].duration_minutes
+            for j in range(i + 1, len(timed_tasks)):
+                start_b = _time_to_minutes(timed_tasks[j].preferred_time)
+                end_b = start_b + timed_tasks[j].duration_minutes
+                if start_a < end_b and start_b < end_a:
+                    conflicts.append((timed_tasks[i], timed_tasks[j]))
         return conflicts
 
     def mark_task_complete(self, owner, task):
