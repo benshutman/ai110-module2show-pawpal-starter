@@ -96,7 +96,7 @@ Conflict check:
 
 ```bash
 # Run the full test suite:
-pytest
+python -m pytest
 
 # Run with coverage:
 pytest --cov
@@ -107,23 +107,29 @@ Sample test output:
 ```
 ============================= test session starts ==============================
 platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
-rootdir: .../ai110-module2show-pawpal-starter
+rootdir: /Users/benjaminshutman/Codepath x Anthropic Summer 2026/Codepath-x-Anthropic/ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 8 items
+collected 22 items
 
-tests/test_pawpal.py ........                                            [100%]
+tests/test_pawpal.py ......................                              [100%]
 
-============================== 8 passed in 0.01s ===============================
+============================== 22 passed in 0.01s ===============================
 ```
 
 **Test coverage:**
 
 - **Task completion** — `mark_complete()` flips `completion_status` from `False` to `True`.
 - **Task addition** — adding tasks to a `Pet` increases its task count.
-- **Recurring automation** — completing a `daily`/`weekly` task creates a correctly-dated next occurrence on the same pet; completing a non-recurring task creates nothing.
-- **Conflict detection** — tasks sharing an exact `preferred_time` are flagged as a conflicting pair; tasks with no preferred time never conflict.
-- **Sorting** — `sort_by_time()` orders tasks chronologically by `preferred_time`, with flexible (no-time) tasks sorted last.
-- **Filtering** — `filter_tasks()` narrows a pooled task list down by pet name and by completion status.
+- **Recurring automation** — completing a `daily`/`weekly` task creates a correctly-dated next occurrence on the same pet; completing a non-recurring task creates nothing; completing an already-completed task a second time doesn't duplicate the next occurrence.
+- **Conflict detection** — tasks sharing an exact `preferred_time` are flagged (including all pairs when 3+ tasks collide); tasks with no preferred time, or an empty task list, never conflict.
+- **Sorting** — `sort_by_time()` orders tasks chronologically by `preferred_time`, with flexible (no-time) tasks sorted last and ties/all-flexible lists keeping their original order (stable sort).
+- **Filtering** — `filter_tasks()` narrows a pooled task list by pet name, by completion status, or both at once; unmatched filters and empty input return an empty list.
+- **Greedy scheduling** — `build_schedule()` schedules tasks that fit the time budget and skips the rest, including the exact-fit boundary, a zero-minute budget, an empty task list, and wrapping the clock past midnight.
+
+**Confidence Level:** ⭐⭐⭐⭐☆ (4/5)
+
+All 22 tests pass, covering every algorithmic feature's happy path plus real edge cases (empty lists, ties, exact-fit boundaries, midnight wraparound, double-completion) — and writing the edge cases actually caught a real bug (`mark_task_complete()` could double-schedule a recurring task before the guard was added). It's not a 5 because a few gaps are known and documented rather than closed: `detect_conflicts()` only catches exact-time matches, not true overlapping durations (see `reflection.md` §2b), and there's no input validation on `preferred_time` strings, so a malformed value like `"7:30"` would silently sort/compare incorrectly instead of raising an error.
+- **Greedy scheduling** — `build_schedule()` schedules tasks that fit the time budget and skips the rest, including the exact-fit boundary, a zero-minute budget, an empty task list, and wrapping the clock past midnight.
 
 ## 🧩 System Design
 

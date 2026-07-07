@@ -220,10 +220,14 @@ class Scheduler:
         Returns:
             Task: The newly scheduled next occurrence, if ``task`` recurs
                 daily/weekly and its pet was found.
-            None: If the task doesn't recur.
+            None: If the task doesn't recur, or was already complete (so
+                completing it twice can't schedule two next occurrences).
 
         Algorithmic feature #5: recurrence automation via Task.next_occurrence().
         """
+        if task.completion_status:
+            return None
+
         task.mark_complete()
         next_task = task.next_occurrence()
         if next_task is not None:
