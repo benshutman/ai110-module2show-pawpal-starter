@@ -8,6 +8,8 @@ PRIORITY_VALUES = {"high": 3, "medium": 2, "low": 1}
 # Maps a recurrence frequency to how far past today its next occurrence falls.
 RECURRENCE_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
+VALID_RECURRENCE_VALUES = {"none", *RECURRENCE_INTERVALS}
+
 
 def _add_minutes(time_str, minutes):
     """Add ``minutes`` to an ``"HH:MM"`` clock string and return the new ``"HH:MM"``."""
@@ -45,6 +47,22 @@ def _normalize_time(time_str):
     return f"{hours:02d}:{minutes:02d}"
 
 
+def _normalize_choice(value, valid_values, field_name):
+    """Validate ``value`` case-insensitively against ``valid_values``.
+
+    A typo here (e.g. "Daily" or "hgih") would otherwise degrade silently —
+    ``dict.get(..., default)`` lookups elsewhere just fall back to a default
+    weight/behavior instead of surfacing the mistake.
+
+    Raises:
+        ValueError: If ``value`` (lowercased) isn't one of ``valid_values``.
+    """
+    normalized = value.lower() if isinstance(value, str) else value
+    if normalized not in valid_values:
+        raise ValueError(f"{field_name} must be one of {sorted(valid_values)}, got {value!r}")
+    return normalized
+
+
 @dataclass
 class Task:
     title: str
@@ -58,13 +76,16 @@ class Task:
     pet_name: str = ""
 
     def __post_init__(self):
-        """Normalize preferred_time so every stored value is comparable "HH:MM"."""
+        """Validate/normalize fields so a typo fails loudly instead of degrading
+        silently into a wrong-but-plausible weight or behavior."""
+        self.priority = _normalize_choice(self.priority, PRIORITY_VALUES, "priority")
+        self.recurring = _normalize_choice(self.recurring, VALID_RECURRENCE_VALUES, "recurring")
         if self.preferred_time:
             self.preferred_time = _normalize_time(self.preferred_time)
 
     def get_priority_value(self):
         """Return a sortable weight for this task's priority (higher = more urgent)."""
-        return PRIORITY_VALUES.get(self.priority.lower(), 0)
+        return PRIORITY_VALUES[self.priority]
 
     def describe(self):
         """Return a human-readable one-line summary of the task."""

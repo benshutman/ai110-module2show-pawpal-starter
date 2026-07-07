@@ -116,18 +116,32 @@ else:
     if st.button("Add task"):
         pet = pets[target_index]
         try:
-            pet.add_task(
-                Task(
-                    title=task_title,
-                    description=task_description,
-                    duration_minutes=int(duration),
-                    priority=priority,
-                    due_date=str(due_date),
-                    recurring=recurring,
-                    preferred_time=preferred_time,
-                )
+            new_task = Task(
+                title=task_title,
+                description=task_description,
+                duration_minutes=int(duration),
+                priority=priority,
+                due_date=str(due_date),
+                recurring=recurring,
+                preferred_time=preferred_time,
             )
+            pet.add_task(new_task)
             st.success(f"Added '{task_title}' to {pet.name}.")
+
+            # Surface conflicts the moment they're created, not just when the
+            # owner later happens to open Browse Tasks — that's the point at
+            # which they can still act on it (pick a different time).
+            if new_task.preferred_time:
+                conflict_checker = Scheduler(available_minutes=0)
+                conflicts = conflict_checker.detect_conflicts(owner.get_all_tasks())
+                for task_a, task_b in conflicts:
+                    if task_a is new_task or task_b is new_task:
+                        other = task_b if task_a is new_task else task_a
+                        st.warning(
+                            f"⚠ '{new_task.title}' overlaps with '{other.title}' "
+                            f"({other.pet_name}, {other.preferred_time}). "
+                            "Consider picking a different time."
+                        )
         except ValueError as e:
             st.error(str(e))
 

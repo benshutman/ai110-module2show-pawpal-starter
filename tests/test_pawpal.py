@@ -36,6 +36,29 @@ def test_task_leaves_empty_preferred_time_untouched():
     assert task.preferred_time == ""
 
 
+def test_task_normalizes_priority_and_recurring_case():
+    """Input Validation: "HIGH"/"Daily" are accepted case-insensitively and
+    stored lowercase, matching how every other field compares them."""
+    task = make_task(priority="HIGH", recurring="Daily")
+
+    assert task.priority == "high"
+    assert task.recurring == "daily"
+
+
+def test_task_rejects_invalid_priority():
+    """Input Validation (edge case): a priority typo like "hgih" would otherwise
+    silently fall back to the lowest weight — this raises instead."""
+    with pytest.raises(ValueError):
+        make_task(priority="hgih")
+
+
+def test_task_rejects_invalid_recurring():
+    """Input Validation (edge case): a recurring typo like "Weekley" would
+    otherwise silently behave as non-recurring — this raises instead."""
+    with pytest.raises(ValueError):
+        make_task(recurring="weekley")
+
+
 def test_task_rejects_invalid_preferred_time():
     """Input Validation (edge case): a malformed preferred_time raises ValueError
     at construction time instead of silently corrupting sort/conflict results."""

@@ -35,6 +35,12 @@
 - Why is that tradeoff reasonable for this scenario?
     - I verified the upgrade didn't regress the original behavior: every existing exact-time-match test still passes (same start time always trivially overlaps), and I added new tests for the cases the old version would have missed — different start times with overlapping durations (now correctly flagged) and back-to-back tasks that only touch (correctly *not* flagged). I also confirmed this live in `main.py`: completing the daily "Morning walk" still auto-schedules its next occurrence at the same 07:30 slot as the just-completed original, and `detect_conflicts()` still catches that pair under the new overlap-based logic.
 
+**c. Presenting conflicts in the UI**
+
+- If your Scheduler flags a task conflict, how should that warning be presented in the Streamlit UI to be most helpful to a pet owner?
+    - Two things make a conflict warning actually useful: timing and specificity. Timing — flagging it only when the owner later happens to open "Browse Tasks" is too late to be actionable; they've moved on and may never look. So `app.py` now calls `detect_conflicts()` again immediately after `Add task` and shows an `st.warning()` right at the moment of creation, while the form (and the ability to just change the preferred time) is still in front of them. Specificity — a generic "you have a conflict somewhere" forces the owner to go hunt for it, so the warning names both tasks, the pet, and the exact overlapping time, e.g. `⚠ 'Vet checkup' overlaps with 'Morning walk' (Mochi, 07:30). Consider picking a different time.` — everything needed to resolve it without leaving the page. I kept the existing Browse Tasks conflict list too, since it still catches conflicts created indirectly (e.g., a recurring task's auto-scheduled next occurrence landing on an already-taken slot) that an add-time check can't see.
+    - I verified this live with a headless-browser screenshot: adding "Morning walk" (07:30) then "Vet checkup" at an overlapping 07:40 shows the yellow `st.warning` immediately below the green `st.success`, distinct enough to notice, with no console errors.
+
 ---
 
 ## 3. AI Collaboration
