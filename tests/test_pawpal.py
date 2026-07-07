@@ -72,6 +72,49 @@ def test_task_rejects_invalid_preferred_time():
         make_task(preferred_time="12:75")
 
 
+def test_task_rejects_non_numeric_duration():
+    """Input Validation (advanced edge case): a non-numeric duration_minutes
+    (e.g. a string typed into a form) would otherwise crash later, deep inside
+    a sort/schedule comparison, far from where the bad value was introduced —
+    this raises immediately at construction time instead."""
+    with pytest.raises(ValueError):
+        make_task(duration="twenty")
+
+
+def test_task_rejects_negative_or_zero_duration():
+    """Input Validation (advanced edge case): a negative or zero duration is
+    physically meaningless for a care task and would otherwise silently
+    corrupt scheduling math (e.g. a negative duration "frees up" time in
+    build_schedule() instead of costing any)."""
+    with pytest.raises(ValueError):
+        make_task(duration=-5)
+
+    with pytest.raises(ValueError):
+        make_task(duration=0)
+
+
+def test_task_rejects_empty_title():
+    """Input Validation (advanced edge case): an empty (or whitespace-only)
+    title would otherwise silently create an unidentifiable task that shows
+    up blank in every table and plan the UI renders."""
+    with pytest.raises(ValueError):
+        make_task(title="")
+
+    with pytest.raises(ValueError):
+        make_task(title="   ")
+
+
+def test_scheduler_rejects_negative_available_minutes():
+    """Input Validation (advanced edge case): a negative time budget is
+    nonsensical and would otherwise silently behave like a zero budget
+    (every task quietly skipped) instead of surfacing the bad input; zero
+    itself must stay valid since it's a legitimate empty-day budget."""
+    with pytest.raises(ValueError):
+        Scheduler(available_minutes=-10)
+
+    Scheduler(available_minutes=0)  # still valid — a real "no time today" case
+
+
 def test_mark_complete_changes_status():
     """Task Completion: calling mark_complete() flips completion_status to True."""
     task = make_task()
@@ -376,3 +419,63 @@ def test_build_schedule_with_no_tasks_returns_empty_plan():
         "minutes_used": 0,
         "minutes_available": 60,
     }
+
+
+def test_find_next_available_slot_with_no_tasks_returns_start_time():
+    """Next Available Slot: with no existing tasks, the day's own start_time is free."""
+    scheduler = Scheduler(available_minutes=60, start_time="08:00")
+
+    assert scheduler.find_next_available_slot(20, []) == "08:00"
+
+
+def test_find_next_available_slot_finds_the_gap_between_two_tasks():
+    """Next Available Slot: a 10-minute task fits in the gap between a task
+    ending at 08:20 and one starting at 08:40."""
+    scheduler = Scheduler(available_minutes=120, start_time="08:00")
+    morning_walk = make_task(title="Morning walk", duration=20, preferred_time="08:00")  # 08:00-08:20
+    feeding = make_task(title="Feeding", duration=10, preferred_time="08:40")  # 08:40-08:50
+
+    slot = scheduler.find_next_available_slot(10, [morning_walk, feeding])
+
+    assert slot == "08:20"
+
+
+def test_find_next_available_slot_skips_a_gap_too_small_to_fit():
+    """Next Available Slot (edge case): a gap shorter than the requested duration
+    is skipped in favor of the next open gap."""
+    scheduler = Scheduler(available_minutes=120, start_time="08:00")
+    morning_walk = make_task(title="Morning walk", duration=20, preferred_time="08:00")  # 08:00-08:20
+    feeding = make_task(title="Feeding", duration=10, preferred_time="08:25")  # only a 5-min gap before it
+
+    slot = scheduler.find_next_available_slot(10, [morning_walk, feeding])
+
+    assert slot == "08:35"
+
+
+def test_find_next_available_slot_ignores_flexible_tasks():
+    """Next Available Slot: tasks with no preferred_time never block a slot."""
+    scheduler = Scheduler(available_minutes=60, start_time="08:00")
+    flexible = make_task(title="Playtime")
+
+    assert scheduler.find_next_available_slot(15, [flexible]) == "08:00"
+
+
+def test_find_next_available_slot_returns_none_when_the_day_is_full():
+    """Next Available Slot (edge case): no slot of the requested length fits
+    before the day's time budget runs out."""
+    scheduler = Scheduler(available_minutes=30, start_time="08:00")
+    walk = make_task(title="Morning walk", duration=30, preferred_time="08:00")  # fills the entire budget
+
+    assert scheduler.find_next_available_slot(10, [walk]) is None
+
+
+def test_find_next_available_slot_fits_exactly_at_the_end_of_the_window():
+    """Next Available Slot (edge case): a slot ending exactly at the window
+    boundary is still returned — the fit check is inclusive (<=), matching
+    build_schedule()'s exact-fit behavior."""
+    scheduler = Scheduler(available_minutes=30, start_time="08:00")
+    walk = make_task(title="Morning walk", duration=20, preferred_time="08:00")  # 08:00-08:20
+
+    slot = scheduler.find_next_available_slot(10, [walk])  # needs 08:20-08:30; window ends 08:30
+
+    assert slot == "08:20"

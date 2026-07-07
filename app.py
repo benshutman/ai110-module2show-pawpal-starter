@@ -66,7 +66,7 @@ with pcol2:
 with pcol3:
     pet_age = st.number_input("Age", min_value=0, max_value=40, value=3)
 
-if st.button("Add pet"):
+if st.button("Add pet", key="add_pet_button"):
     owner.add_pet(Pet(name=pet_name, species=species, age=int(pet_age)))
     st.success(f"Added {pet_name} the {species}.")
 
@@ -95,11 +95,33 @@ else:
         format_func=lambda i: f"{pets[i].name} ({pets[i].species})",
     )
 
+    def _suggest_task_time():
+        # Runs as an on_click callback (before widgets re-render this run) since
+        # Streamlit forbids writing to a widget's session_state key once that
+        # widget has already been instantiated in the current script run.
+        #
+        # Search from the Scheduler's own default start_time (08:00) through the
+        # end of that same day — not the later "minutes available" budget, which
+        # governs what fits into today's plan rather than when a slot is free —
+        # and not past midnight, matching detect_conflicts()'s documented
+        # single-day-only scope (see reflection.md section 2b).
+        slot_finder = Scheduler(available_minutes=(24 - 8) * 60)
+        duration_value = st.session_state.get("task_duration_input", 20)
+        suggestion = slot_finder.find_next_available_slot(
+            int(duration_value), st.session_state.owner.get_all_tasks()
+        )
+        st.session_state.preferred_time_input = suggestion or ""
+        st.session_state.suggestion_message = (
+            None if suggestion else "No open slot found for that duration today."
+        )
+
     col1, col2, col3 = st.columns(3)
     with col1:
-        task_title = st.text_input("Task title", value="Morning walk")
+        task_title = st.text_input("Task title", value="Morning walk", key="task_title_input")
     with col2:
-        duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
+        duration = st.number_input(
+            "Duration (minutes)", min_value=1, max_value=240, value=20, key="task_duration_input"
+        )
     with col3:
         priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 
@@ -109,11 +131,21 @@ else:
     with col5:
         recurring = st.selectbox("Recurring", ["none", "daily", "weekly"])
     with col6:
-        preferred_time = st.text_input("Preferred time (HH:MM, optional)", value="")
+        preferred_time = st.text_input(
+            "Preferred time (HH:MM, optional)", value="", key="preferred_time_input"
+        )
 
     task_description = st.text_input("Description (optional)", value="")
 
-    if st.button("Add task"):
+    suggest_col, add_col = st.columns(2)
+    with suggest_col:
+        st.button("Suggest a time", on_click=_suggest_task_time, key="suggest_time_button")
+        if st.session_state.get("suggestion_message"):
+            st.warning(st.session_state.suggestion_message)
+    with add_col:
+        add_task_clicked = st.button("Add task", key="add_task_button")
+
+    if add_task_clicked:
         pet = pets[target_index]
         try:
             new_task = Task(

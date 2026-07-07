@@ -78,6 +78,12 @@ class Task:
     def __post_init__(self):
         """Validate/normalize fields so a typo fails loudly instead of degrading
         silently into a wrong-but-plausible weight or behavior."""
+        if not isinstance(self.duration_minutes, int) or isinstance(self.duration_minutes, bool):
+            raise ValueError(f"duration_minutes must be an int, got {self.duration_minutes!r}")
+        if self.duration_minutes <= 0:
+            raise ValueError(f"duration_minutes must be positive, got {self.duration_minutes!r}")
+        if not self.title or not self.title.strip():
+            raise ValueError("title must not be empty")
         self.priority = _normalize_choice(self.priority, PRIORITY_VALUES, "priority")
         self.recurring = _normalize_choice(self.recurring, VALID_RECURRENCE_VALUES, "recurring")
         if self.preferred_time:
@@ -172,7 +178,17 @@ class Owner:
 
 class Scheduler:
     def __init__(self, available_minutes: int, start_time: str = "08:00"):
-        """Create a scheduler with a daily time budget and a plan start time."""
+        """Create a scheduler with a daily time budget and a plan start time.
+
+        Raises:
+            ValueError: If available_minutes is negative or not an int. Zero is
+                allowed (a legitimately empty day, see build_schedule() tests) —
+                only a nonsensical negative budget is rejected.
+        """
+        if not isinstance(available_minutes, int) or isinstance(available_minutes, bool):
+            raise ValueError(f"available_minutes must be an int, got {available_minutes!r}")
+        if available_minutes < 0:
+            raise ValueError(f"available_minutes must not be negative, got {available_minutes!r}")
         self.available_minutes = available_minutes
         self.start_time = start_time
 
@@ -266,6 +282,43 @@ class Scheduler:
                 if start_a < end_b and start_b < end_a:
                     conflicts.append((timed_tasks[i], timed_tasks[j]))
         return conflicts
+
+    def find_next_available_slot(self, duration_minutes, tasks):
+        """Find the earliest "HH:MM" start time, within ``[start_time, start_time +
+        available_minutes)``, where a task of ``duration_minutes`` wouldn't overlap
+        any existing timed task.
+
+        Args:
+            duration_minutes (int): Length of the slot to fit.
+            tasks (list[Task]): Existing tasks to avoid colliding with; not mutated.
+                Tasks without a ``preferred_time`` are flexible and never block a slot.
+
+        Returns:
+            str: ``"HH:MM"`` of the earliest open slot.
+            None: If no slot of that length fits before the day's time budget runs out.
+
+        Algorithmic feature #8: earliest-fit gap search across the day's busy intervals,
+        scoped to the same ``start_time``/``available_minutes`` window ``build_schedule()``
+        uses, rather than a separately hardcoded day boundary.
+        """
+        window_start = _time_to_minutes(self.start_time)
+        window_end = window_start + self.available_minutes
+
+        busy = sorted(
+            (_time_to_minutes(t.preferred_time), _time_to_minutes(t.preferred_time) + t.duration_minutes)
+            for t in tasks
+            if t.preferred_time
+        )
+
+        candidate = window_start
+        for busy_start, busy_end in busy:
+            if busy_start >= candidate + duration_minutes:
+                break
+            candidate = max(candidate, busy_end)
+
+        if candidate + duration_minutes <= window_end:
+            return f"{candidate // 60:02d}:{candidate % 60:02d}"
+        return None
 
     def mark_task_complete(self, owner, task):
         """Complete a task and auto-schedule its next occurrence if it recurs.

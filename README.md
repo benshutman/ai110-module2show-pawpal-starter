@@ -31,6 +31,7 @@ Your final app should:
 - **Daily/weekly recurrence** — completing a recurring task automatically schedules its next occurrence on the same pet, guarded against double-scheduling.
 - **Greedy time-budget scheduling** — the daily plan packs as many priority-ordered tasks as fit within the owner's available minutes, and explains what was scheduled, what was skipped, and why.
 - **Input validation** — priority, recurrence, and preferred-time values are validated and normalized (e.g., `"HIGH"` → `"high"`, `"7:30"` → `"07:30"`) so a typo raises an error instead of silently degrading into a wrong-but-plausible default.
+- **Next available slot suggestion** *(stretch)* — click "Suggest a time" on the Add Task form to auto-fill the earliest open gap of the right length, instead of guessing a time and risking a conflict.
 
 ## Getting started
 
@@ -119,16 +120,18 @@ Sample test output:
 platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: /Users/benjaminshutman/Codepath x Anthropic Summer 2026/Codepath-x-Anthropic/ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 30 items
+collected 42 items
 
-tests/test_pawpal.py ..............................                      [100%]
+tests/test_app.py ..                                                     [  4%]
+tests/test_pawpal.py ........................................            [100%]
 
-============================== 30 passed in 0.02s ===============================
+============================== 42 passed in 0.90s ===============================
 ```
 
 **Test coverage:**
 
 - **Input validation** — `preferred_time` is normalized to zero-padded `"HH:MM"` (e.g. `"7:30"` → `"07:30"`); `priority` and `recurring` are validated case-insensitively against their allowed sets (e.g. `"HIGH"` → `"high"`). Malformed values for any of the three raise `ValueError` at construction time instead of silently degrading (a bad priority would otherwise quietly get the lowest weight; a bad recurring value would otherwise quietly never recur).
+- **Advanced edge-case testing** — `duration_minutes` rejects non-numeric strings (e.g. `"twenty"`) and negative/zero values instead of silently corrupting scheduling math; `title` rejects empty/whitespace-only strings instead of creating an unidentifiable blank task; `Scheduler(available_minutes=...)` rejects negative budgets while still allowing zero (a legitimate empty day). See the "Advanced Edge-Case Testing" entry in `ai_interactions.md` for the prompt and rationale behind each case.
 - **Task completion** — `mark_complete()` flips `completion_status` from `False` to `True`.
 - **Task addition** — adding tasks to a `Pet` increases its task count.
 - **Recurring automation** — completing a `daily`/`weekly` task creates a correctly-dated next occurrence on the same pet; completing a non-recurring task creates nothing; completing an already-completed task a second time doesn't duplicate the next occurrence.
@@ -136,16 +139,20 @@ tests/test_pawpal.py ..............................                      [100%]
 - **Sorting** — `sort_by_time()` orders tasks chronologically by `preferred_time`, with flexible (no-time) tasks sorted last and ties/all-flexible lists keeping their original order (stable sort).
 - **Filtering** — `filter_tasks()` narrows a pooled task list by pet name, by completion status, or both at once; unmatched filters and empty input return an empty list.
 - **Greedy scheduling** — `build_schedule()` schedules tasks that fit the time budget and skips the rest, including the exact-fit boundary, a zero-minute budget, an empty task list, and wrapping the clock past midnight.
+- **Next available slot** — `find_next_available_slot()` finds the earliest open gap, skips gaps too small to fit, ignores flexible tasks, and returns `None` when the day is fully booked.
+- **UI behavior** — `tests/test_app.py` drives the real Streamlit script with `AppTest` to verify the "Suggest a time" button end to end (both the successful-suggestion and fully-booked paths), not just the underlying method in isolation.
 
 **Confidence Level:** ⭐⭐⭐⭐⭐ (5/5)
 
-All 30 tests pass, covering every algorithmic feature's happy path plus real edge cases (empty lists, ties, exact-fit boundaries, midnight wraparound, double-completion, malformed input) — and writing the edge cases actually caught a real bug (`mark_task_complete()` could double-schedule a recurring task before a guard was added). I'd initially marked this 5/5 right after closing the conflict-detection and `preferred_time`-validation gaps, but on reflection that was premature: `priority` and `recurring` had the exact same unvalidated-string vulnerability `preferred_time` did (a typo silently degrading to a wrong-but-plausible default instead of raising), just not yet fixed. All three fields are now validated the same way, so the 5/5 reflects that every gap I've found so far is actually closed and tested, not just the first two. One small, deliberately-accepted limitation remains: conflict overlap checks don't span midnight (a task at "23:50" isn't checked against next-day tasks) — see `reflection.md` §2b for why that's an acceptable tradeoff for a daily pet-care scheduler.
+All 42 tests pass, covering every algorithmic feature's "happy path" plus real edge cases. It focused on coverage of empty lists, ties, exact-fit boundaries, midnight wraparound, double-completion, malformed input- anything that would GIGO. 
+In writing the edge cases we actually caught a real bug (`mark_task_complete()` could double-schedule a recurring task before a guard was added). I'd initially marked this 5/5 after closing the conflict-detection and `preferred_time`-validation gaps, however, on reflection that was premature: `priority` and `recurring` had the exact same class of error: an unvalidated-string vulnerability `preferred_time` did (a typo silently degrading to a wrong-but-plausible default instead of raising). All three fields are now validated the same way. Going further while adding the advanced edge-case tests turned up two more real gaps of the same shape — `duration_minutes` and `title` had no validation at all, and `Scheduler`'s `available_minutes` could go negative and silently behave like a zero budget instead of raising — so those are now closed too. The 5/5 score reflects that every gap I've found so far is actually closed and tested, not just the first two. 
+One deliberately-accepted limitation remains: conflict overlap checks don't span midnight (a task at "23:50" isn't checked against next-day tasks) — see `reflection.md` §2b for why that's an acceptable tradeoff for a daily pet-care scheduler and why splitting ranges across day boundaries does not really make sense for a pet scheduling app where people simply will not be scheduling an hour long dog grooming session at 11:30 PM at night.
 
 ## 🧩 System Design
 
 PawPal+ is built around four classes:
 
-- **`Owner`** — the pet owner using the app. Holds their name, preferences, and the list of `Pet`s they manage. `get_all_tasks()` pools every pet's tasks into one flat list so the `Scheduler` can plan across all of an owner's pets at once.
+- **`Owner`** — the User, the pet owner using the app. Holds their name, preferences, and the list of `Pet`s they manage. `get_all_tasks()` pools every pet's tasks into one flat list so the `Scheduler` can plan across all of an owner's pets at once.
 - **`Pet`** — a single pet (name, species, age) and its list of `Task`s. `add_task()` stamps each task with the pet's name so a pooled task list can still be traced back to which pet it belongs to.
 - **`Task`** — one care task: title, description, duration, priority, due date, recurrence (`"none"`/`"daily"`/`"weekly"`), an optional preferred time of day, and completion status. A task controls its own state — `mark_complete()` is the only way to flip `completion_status`, and `next_occurrence()` builds the task's next instance if it recurs.
 - **`Scheduler`** — takes a pool of tasks and a daily time budget. It can sort tasks (by priority or by time), filter them (by pet or status), detect basic scheduling conflicts, mark a task complete (auto-scheduling its next occurrence if it recurs), and greedily build/explain a day's plan that fits the available time.
@@ -161,6 +168,7 @@ PawPal+ is built around four classes:
 | Recurring task logic | `Task.next_occurrence()`, `Scheduler.mark_task_complete()` | Completing a `daily`/`weekly` task automatically creates and attaches its next occurrence (due one interval past today) to the same pet. Guards against double-completion creating a duplicate occurrence. |
 | Greedy scheduling | `Scheduler.build_schedule()` | Packs the priority-sorted list into the day sequentially, skipping any task that doesn't fit the remaining `available_minutes`. |
 | Input validation | `Task.__post_init__()` | Normalizes `preferred_time` (`"7:30"` → `"07:30"`), `priority`, and `recurring` (case-insensitive) and raises `ValueError` on anything outside their allowed values, so `app.py` can catch it and show `st.error()` instead of a typo silently degrading into a wrong-but-plausible weight or behavior. |
+| Next available slot *(stretch)* | `Scheduler.find_next_available_slot()` | Finds the earliest `"HH:MM"` gap of a given duration within `[start_time, 24:00)` that doesn't overlap any existing timed task, or `None` if the day is fully booked. Powers the "Suggest a time" button on the Add Task form. Scoped to a single day, same as `detect_conflicts()` (section 2b). |
 
 ## 📸 Demo Walkthrough
 
@@ -170,6 +178,7 @@ A reviewer can follow these steps in the running Streamlit app (`streamlit run a
 
 - Enter owner info and add one or more pets (name, species, age)
 - Add care tasks to a pet (title, duration, priority, due date, recurrence, optional preferred time)
+- Get an automatic time suggestion for a new task via **Suggest a time**, instead of guessing and risking a conflict
 - Browse the pooled task list sorted by time, or filtered by pet / completion status
 - See overlapping-time conflicts flagged the moment a task is added, and again while browsing
 - Mark a task complete — a recurring task automatically schedules its next occurrence
@@ -181,25 +190,29 @@ A reviewer can follow these steps in the running Streamlit app (`streamlit run a
 
    ![Add a pet](screenshots/01-add-pet.png)
 
-2. Add a task to that pet — e.g., "Morning walk," 20 minutes, high priority, recurring `daily`, preferred time `07:30`.
+2. Add a task to that pet — e.g., "Morning walk," 20 minutes, high priority, recurring `daily`, preferred time `08:00`.
 
    ![Add a task](screenshots/02-add-task.png)
 
-3. Add a second, overlapping task (e.g., "Vet checkup" at `07:40`) — a conflict warning appears immediately: `⚠ 'Vet checkup' overlaps with 'Morning walk' (Mochi, 07:30). Consider picking a different time.`
+3. Add a second, overlapping task (e.g., "Vet checkup" at `08:10`) — a conflict warning appears immediately: `⚠ 'Vet checkup' overlaps with 'Morning walk' (Mochi, 08:00). Consider picking a different time.`
 
    ![Conflict warning on add](screenshots/03-conflict-warning.png)
 
-4. Open **Browse Tasks** to see the pooled task list sorted by time, or filter it down to just this pet's tasks or just the completed ones.
+4. Instead of guessing a time for a third task, enter "Grooming," set the duration to 30 minutes, and click **Suggest a time** — it fills in `08:30`, the earliest gap after both existing tasks, with no conflict.
 
-   ![Browse tasks sorted by time](screenshots/04-browse-tasks.png)
+   ![Suggest a time fills the earliest open gap](screenshots/04-suggest-a-time.png)
 
-5. Mark "Morning walk" complete — since it's a `daily` recurring task, its next occurrence is automatically scheduled for tomorrow on the same pet (and the conflict check still catches that the new occurrence collides with "Vet checkup").
+5. Open **Browse Tasks** to see the pooled task list sorted by time, or filter it down to just this pet's tasks or just the completed ones.
 
-   ![Mark a task complete triggers recurrence automation](screenshots/05-mark-complete.png)
+   ![Browse tasks sorted by time](screenshots/05-browse-tasks.png)
 
-6. Set "Minutes available today" and click **Generate schedule** to see today's plan: which tasks were scheduled (in priority + time order), which were skipped for lack of time, and the reasoning behind the ordering.
+6. Mark "Morning walk" complete — since it's a `daily` recurring task, its next occurrence is automatically scheduled for tomorrow on the same pet (and the conflict check still catches that the new occurrence collides with "Vet checkup").
 
-   ![Generated daily schedule](screenshots/06-build-schedule.png)
+   ![Mark a task complete triggers recurrence automation](screenshots/06-mark-complete.png)
+
+7. Set "Minutes available today" and click **Generate schedule** to see today's plan: which tasks were scheduled (in priority + time order), which were skipped for lack of time, and the reasoning behind the ordering.
+
+   ![Generated daily schedule](screenshots/07-build-schedule.png)
 
 **Key Scheduler behaviors shown along the way:**
 
@@ -207,6 +220,7 @@ A reviewer can follow these steps in the running Streamlit app (`streamlit run a
 - Time-based sorting (`sort_by_time`) orders the Browse Tasks view chronologically
 - Filtering (`filter_tasks`) narrows the pooled list by pet and/or completion status
 - Overlap-aware conflict detection (`detect_conflicts`) flags colliding preferred times, both on add and while browsing
+- Next-available-slot search (`find_next_available_slot`) fills in the earliest open gap for a new task's duration, scoped to the same single-day window as conflict detection
 - Recurrence automation (`Task.next_occurrence`, `mark_task_complete`) reschedules daily/weekly tasks without manual re-entry
 - Greedy time-budget scheduling (`build_schedule`) fits as many tasks as possible into the available minutes
 
